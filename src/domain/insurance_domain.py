@@ -1,4 +1,4 @@
-"""保险行业领域设定 — 常见客户意图参考框架（非固定分类）。"""
+"""Insurance domain configuration — common customer intent reference framework (not fixed taxonomy)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from typing import Dict, List
 
 @dataclass
 class IntentCategory:
-    """保险客户常见意图类别 — 供 LLM 参考，非强制枚举。"""
+    """Common insurance customer intent categories — LLM reference only, not enforced enum."""
     code: str
     name: str
     description: str
@@ -16,89 +16,89 @@ class IntentCategory:
     typical_slots: List[str] = field(default_factory=list)
 
 
-# 保险行业客户常见意图分类体系（2026 智能客服实践）
+# Insurance industry customer intent taxonomy (2026 intelligent customer service practice)
 INSURANCE_INTENT_CATEGORIES: List[IntentCategory] = [
     IntentCategory(
         code="product_inquiry",
-        name="产品咨询",
-        description="了解某款保险产品的保障范围、条款内容、特色卖点、适购人群",
-        examples=["这款重疾险保哪些疾病", "医疗险包不包含门诊", "适合什么年龄段"],
+        name="Product Inquiry",
+        description="Learn about coverage scope, policy terms, key features, and target demographics for a product",
+        examples=["What diseases does this CI plan cover?", "Does medical insurance cover outpatient visits?", "What age group is it suited for?"],
         typical_slots=["product_name", "insurance_type"],
     ),
     IntentCategory(
         code="premium_inquiry",
-        name="保费询价",
-        description="询问保费金额、费率、缴费年限、缴费方式",
-        examples=["多少钱一年", "30岁男性买50万保额要多少", "年缴还是月缴"],
+        name="Premium Inquiry",
+        description="Ask about premium amount, rates, payment term, and payment method",
+        examples=["How much per year?", "How much for a 30-year-old male with 500k coverage?", "Annual or monthly payment?"],
         typical_slots=["product_name", "age", "gender", "coverage_amount", "payment_period"],
     ),
     IntentCategory(
         code="coverage_terms",
-        name="保障条款",
-        description="等待期、观察期、免责条款、保障期限、续保规则",
-        examples=["等待期多久", "什么情况下不赔", "保证续保吗"],
+        name="Coverage Terms",
+        description="Waiting period, observation period, exclusions, coverage duration, renewal rules",
+        examples=["How long is the waiting period?", "When is a claim not paid?", "Is renewal guaranteed?"],
         typical_slots=["product_name", "clause_type"],
     ),
     IntentCategory(
         code="claims_service",
-        name="理赔服务",
-        description="理赔流程、所需材料、理赔进度、报销比例",
-        examples=["怎么申请理赔", "住院理赔需要什么材料", "理赔多久到账"],
+        name="Claims Service",
+        description="Claims process, required documents, claim status, reimbursement ratio",
+        examples=["How do I file a claim?", "What documents are needed for hospitalization claims?", "How long until payout?"],
         typical_slots=["product_name", "claim_type", "hospital"],
     ),
     IntentCategory(
         code="purchase",
-        name="投保购买",
-        description="表达购买意向、询问投保流程、下单操作",
-        examples=["我想买一份", "怎么投保", "在线能买吗"],
+        name="Purchase",
+        description="Express purchase intent, ask about enrollment process or how to order",
+        examples=["I want to buy one", "How do I enroll?", "Can I buy online?"],
         typical_slots=["product_name", "budget"],
     ),
     IntentCategory(
         code="product_compare",
-        name="产品对比",
-        description="对比两款或多款产品的差异",
-        examples=["A和B哪个好", "帮我对比一下", "有什么区别"],
+        name="Product Comparison",
+        description="Compare differences between two or more products",
+        examples=["Which is better, A or B?", "Help me compare them", "What's the difference?"],
         typical_slots=["product_a", "product_b", "compare_dimension"],
     ),
     IntentCategory(
         code="policy_service",
-        name="保单服务",
-        description="续保、退保、保单变更、查询保单信息",
-        examples=["怎么续保", "想退保", "变更受益人", "查我的保单"],
+        name="Policy Service",
+        description="Renewal, surrender, policy changes, policy lookup",
+        examples=["How do I renew?", "I want to surrender", "Change beneficiary", "Look up my policy"],
         typical_slots=["policy_no", "service_type"],
     ),
     IntentCategory(
         code="value_added",
-        name="权益增值",
-        description="增值服务、就医绿通、健康管理、体检权益",
-        examples=["有没有绿通服务", "免费体检怎么用"],
+        name="Value-Added Benefits",
+        description="Value-added services, medical concierge, health management, checkup benefits",
+        examples=["Is there a green-channel service?", "How do I use the free checkup?"],
         typical_slots=["product_name", "service_type"],
     ),
     IntentCategory(
         code="product_recommend",
-        name="产品推荐",
-        description="基于用户画像或隐式需求推荐合适产品",
-        examples=["经常出差买什么险", "给小孩推荐什么", "有什么适合老年人的"],
+        name="Product Recommendation",
+        description="Recommend suitable products based on user profile or implicit needs",
+        examples=["What insurance for frequent business travel?", "What do you recommend for kids?", "Anything suitable for seniors?"],
         typical_slots=["age", "occupation", "scenario", "budget"],
     ),
     IntentCategory(
         code="complaint_feedback",
-        name="投诉建议",
-        description="投诉、不满、建议反馈",
-        examples=["我要投诉", "服务太差了", "提个建议"],
+        name="Complaint & Feedback",
+        description="Complaints, dissatisfaction, suggestions",
+        examples=["I want to file a complaint", "The service is terrible", "I have a suggestion"],
         typical_slots=["issue_type"],
     ),
     IntentCategory(
         code="greeting_chitchat",
-        name="寒暄闲聊",
-        description="问候、感谢、无关闲聊",
-        examples=["你好", "谢谢", "在吗"],
+        name="Greeting & Chitchat",
+        description="Greetings, thanks, unrelated small talk",
+        examples=["Hello", "Thank you", "Are you there?"],
         typical_slots=[],
     ),
     IntentCategory(
         code="other",
-        name="其他",
-        description="无法归入以上类别的其他诉求",
+        name="Other",
+        description="Requests that do not fit the categories above",
         examples=[],
         typical_slots=[],
     ),
@@ -106,14 +106,14 @@ INSURANCE_INTENT_CATEGORIES: List[IntentCategory] = [
 
 CATEGORY_BY_CODE: Dict[str, IntentCategory] = {c.code: c for c in INSURANCE_INTENT_CATEGORIES}
 
-# 产品实体库 — 用于指代消解与槽位抽取
+# Product entity library — reference resolution and slot extraction
 PRODUCT_ENTITIES: Dict[str, List[str]] = {
-    "安心保重疾险2026": ["安心保", "安心保重疾", "这款重疾", "它", "这个"],
-    "康乐医疗险Plus": ["康乐医疗", "康乐Plus", "医疗险", "这款医疗"],
-    "畅行意外险": ["畅行意外", "意外险", "出差险"],
+    "Anxin Critical Illness 2026": ["Anxin", "Anxin CI", "this plan", "it", "this"],
+    "Kangle Medical Plus": ["Kangle Medical", "Kangle Plus", "medical plan", "this medical plan"],
+    "Changxing Accident Insurance": ["Changxing Accident", "accident insurance", "travel insurance"],
 }
 
-# 通用槽位定义（跨意图共享，由 LLM 动态填充）
+# Common slot definitions (shared across intents; filled dynamically by LLM)
 COMMON_SLOT_HINTS = [
     "product_name", "product_a", "product_b",
     "age", "gender", "coverage_amount", "payment_period", "budget",
@@ -122,14 +122,14 @@ COMMON_SLOT_HINTS = [
 
 
 def build_category_prompt() -> str:
-    """构建供 LLM 参考的意图分类说明文本。"""
-    lines = ["以下是保险行业客户常见意图分类（仅供参考，可灵活细化）：\n"]
+    """Build intent category reference text for the LLM."""
+    lines = ["Below are common insurance customer intent categories (reference only — refine as needed):\n"]
     for cat in INSURANCE_INTENT_CATEGORIES:
-        lines.append(f"- 【{cat.name}】({cat.code}): {cat.description}")
+        lines.append(f"- [{cat.name}] ({cat.code}): {cat.description}")
         if cat.examples:
-            lines.append(f"  示例: {'; '.join(cat.examples[:3])}")
+            lines.append(f"  Examples: {'; '.join(cat.examples[:3])}")
         if cat.typical_slots:
-            lines.append(f"  常见槽位: {', '.join(cat.typical_slots)}")
+            lines.append(f"  Typical slots: {', '.join(cat.typical_slots)}")
     return "\n".join(lines)
 
 

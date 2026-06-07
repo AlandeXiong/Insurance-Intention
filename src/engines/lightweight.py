@@ -1,4 +1,4 @@
-"""前端轻量级意图引擎 — 目标延迟 ≤150ms。"""
+"""Frontend lightweight intent engine — target latency ≤150ms."""
 
 from __future__ import annotations
 
@@ -18,9 +18,9 @@ from src.models.intent import IntentResult, IntentSource, SessionContext
 
 class LightweightIntentEngine:
     """
-    双路径轻量引擎：
-    1. 关键词规则匹配（确定性，高置信）
-    2. 字符 n-gram TF-IDF 相似度（兜底）
+    Dual-path lightweight engine:
+    1. Keyword rule matching (deterministic, high confidence)
+    2. Character n-gram TF-IDF similarity (fallback)
     """
 
     def __init__(self, confidence_threshold: float | None = None) -> None:
@@ -42,7 +42,7 @@ class LightweightIntentEngine:
         else:
             intent, confidence, scores = vector_intent, vector_conf, vector_scores
 
-        # 上下文增强：延续上一轮相关意图
+        # Context boost: continue prior-turn related intent
         if ctx and ctx.active_intent and confidence < self.confidence_threshold:
             boosted = self._context_boost(utterance, ctx, scores)
             if boosted:

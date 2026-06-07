@@ -1,10 +1,10 @@
-"""意图分类关系图 — 用于漂移检测中的语义距离计算。"""
+"""Intent category relationship graph — semantic distance for drift detection."""
 
 from __future__ import annotations
 
 from src.domain.insurance_domain import CATEGORY_BY_CODE
 
-# 有向业务邻接：A → B 表示 A 对话中自然延续到 B（子意图切换，非漂移）
+# Directed business adjacency: A → B means A naturally continues to B in dialogue (sub-intent switch, not drift)
 CATEGORY_ADJACENCY: dict[str, set[str]] = {
     "greeting_chitchat": set(CATEGORY_BY_CODE.keys()),
     "product_inquiry": {"premium_inquiry", "coverage_terms", "purchase", "product_compare", "product_recommend"},
@@ -20,7 +20,7 @@ CATEGORY_ADJACENCY: dict[str, set[str]] = {
     "other": set(CATEGORY_BY_CODE.keys()),
 }
 
-# 跨域大跳：几乎一定视为话题切换
+# Cross-domain jumps: almost always treated as topic shift
 DISTANT_PAIRS: set[tuple[str, str]] = {
     ("premium_inquiry", "complaint_feedback"),
     ("claims_service", "product_recommend"),
@@ -31,8 +31,8 @@ DISTANT_PAIRS: set[tuple[str, str]] = {
 
 def graph_distance(from_cat: str, to_cat: str) -> float:
     """
-    分类图距离 [0, 1]，0=相同/强相关，1=完全无关。
-    业界实践：图距离 + 语义相似度融合。
+    Category graph distance in [0, 1]; 0 = same/strongly related, 1 = unrelated.
+    Industry practice: fuse graph distance with semantic similarity.
     """
     if from_cat == to_cat:
         return 0.0
@@ -44,7 +44,7 @@ def graph_distance(from_cat: str, to_cat: str) -> float:
     if from_cat in CATEGORY_ADJACENCY.get(to_cat, set()):
         return 0.2
 
-    # 二跳可达
+    # Two-hop reachable
     neighbors = CATEGORY_ADJACENCY.get(from_cat, set())
     for mid in neighbors:
         if to_cat in CATEGORY_ADJACENCY.get(mid, set()):

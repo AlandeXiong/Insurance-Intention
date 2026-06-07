@@ -1,4 +1,4 @@
-"""系统配置 — 2026 工业级意图识别基准参数。"""
+"""System configuration — 2026 industrial-grade intent recognition baseline parameters."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ def _env_float(key: str, default: float) -> float:
 
 @dataclass
 class LatencyBudget:
-    """端到端延迟预算 (ms)。"""
+    """End-to-end latency budget (ms)."""
     frontend_engine_ms: int = 150
     backend_engine_ms: int = 500
     total_ms: int = 600
@@ -33,7 +33,7 @@ class LatencyBudget:
 
 @dataclass
 class QualityThresholds:
-    """行业基准指标。"""
+    """Industry benchmark metrics."""
     intent_accuracy: float = 0.95
     drift_detection_rate: float = 0.92
     multi_intent_accuracy: float = 0.88
@@ -44,7 +44,7 @@ class QualityThresholds:
 
 
 def _resolve_llm_fields() -> dict:
-    """按 LLM_PROVIDER 解析对应厂商的环境变量。"""
+    """Resolve provider-specific environment variables from LLM_PROVIDER."""
     provider_name = os.getenv("LLM_PROVIDER", "deepseek").strip().lower()
     spec = get_provider(provider_name)
     api_key = os.getenv(spec.api_key_env) or os.getenv("LLM_API_KEY", "")
@@ -64,8 +64,8 @@ def _resolve_llm_fields() -> dict:
 @dataclass
 class LLMConfig:
     """
-    大模型 API 配置（OpenAI 兼容协议）。
-    支持 DeepSeek、阿里云千问（DashScope），通过 LLM_PROVIDER 切换。
+    LLM API configuration (OpenAI-compatible protocol).
+    Supports DeepSeek and Alibaba Cloud Qwen (DashScope); switch via LLM_PROVIDER.
     """
     provider: str = field(default_factory=lambda: _resolve_llm_fields()["provider"])
     display_name: str = field(default_factory=lambda: _resolve_llm_fields()["display_name"])

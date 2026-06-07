@@ -1,4 +1,4 @@
-"""多意图分解模块 — 目标准确率 ≥88%。"""
+"""Multi-intent decomposition module — target accuracy ≥88%."""
 
 from __future__ import annotations
 
@@ -11,11 +11,14 @@ from src.models.intent import IntentResult, SubIntent
 
 class MultiIntentDecomposer:
     """
-    将复合用户输入分解为多个子意图。
-    策略：标点/连接词切分 + 独立意图评分 + 去重合并。
+    Decompose compound user input into multiple sub-intents.
+    Strategy: punctuation/conjunction split + per-segment intent scoring + dedupe merge.
     """
 
-    SPLIT_PATTERN = re.compile(r"[，,；;？?！!]|(?:还有|另外|以及|顺便|同时|并且)")
+    SPLIT_PATTERN = re.compile(
+        r"[,;?!]|(?:\band\b|\balso\b|\bplus\b|\bfurthermore\b|\bbesides\b|\bmeanwhile\b|\bin addition\b|\bas well\b)",
+        re.IGNORECASE,
+    )
 
     def decompose(self, utterance: str, primary_result: IntentResult) -> List[SubIntent]:
         segments = self._split_utterance(utterance)
@@ -38,7 +41,7 @@ class MultiIntentDecomposer:
         if not candidates:
             return self._single_intent_result(primary_result)
 
-        # 确保主意图标记
+        # Ensure primary intent is marked
         has_primary = any(c.is_primary for c in candidates)
         if not has_primary:
             candidates[0].is_primary = True
@@ -57,9 +60,10 @@ class MultiIntentDecomposer:
     def _score_segment(self, segment: str) -> tuple[str, float]:
         best_intent = "fallback"
         best_conf = 0.0
+        segment_lower = segment.lower()
 
         for keywords, intent, base_conf in KEYWORD_INTENT_RULES:
-            hits = sum(1 for kw in keywords if kw in segment)
+            hits = sum(1 for kw in keywords if kw.lower() in segment_lower)
             if hits > 0:
                 conf = min(base_conf + 0.02 * hits, 0.95)
                 if conf > best_conf:
@@ -67,7 +71,7 @@ class MultiIntentDecomposer:
                     best_intent = intent
 
         for name, idef in INSURANCE_INTENTS.items():
-            hits = sum(1 for kw in idef.keywords if kw in segment)
+            hits = sum(1 for kw in idef.keywords if kw.lower() in segment_lower)
             if hits > 0:
                 conf = min(0.78 + 0.04 * hits, 0.92)
                 if conf > best_conf:

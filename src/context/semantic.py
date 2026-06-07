@@ -1,4 +1,4 @@
-"""轻量级语义相似度 — 无 embedding 模型依赖的字符 n-gram 向量。"""
+"""Lightweight semantic similarity — character n-gram vectors without embedding models."""
 
 from __future__ import annotations
 

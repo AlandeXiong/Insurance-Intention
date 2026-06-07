@@ -1,4 +1,4 @@
-"""后端大模型意图引擎 — DeepSeek / 阿里云千问 动态意图捕获。"""
+"""Backend LLM intent engine — DeepSeek / Alibaba Qwen dynamic intent capture."""
 
 from __future__ import annotations
 
@@ -24,63 +24,63 @@ from src.models.intent import (
 
 logger = logging.getLogger(__name__)
 
-# 占位符单独替换，避免 JSON 花括号与 format 冲突
+# Replace placeholder separately to avoid JSON braces conflicting with format
 _CATEGORY_PLACEHOLDER = "{{CATEGORY_FRAMEWORK}}"
 
-SYSTEM_PROMPT = f"""你是资深保险智能客服意图分析专家。请基于对话上下文，动态理解用户最新输入的真实意图。
+SYSTEM_PROMPT = f"""You are a senior insurance intelligent customer service intent analysis expert. Based on conversation context, dynamically understand the user's true intent in their latest input.
 
 {_CATEGORY_PLACEHOLDER}
 
-## 核心原则
-1. **动态捕获**：不要机械套用固定标签，用自然语言精确描述用户当前意图（intent_label）
-2. **参考分类**：category 字段从上述参考分类中选择最接近的一项（code），允许细化和组合
-3. **多轮理解**：结合历史对话消解指代（"它/这个/那个"指什么产品）、继承上下文
-4. **隐式挖掘**：识别用户未明说但可推断的需求（如"经常出差"→可能需要交通意外险）
-5. **多意图并存**：一句含多个问题时，拆分为 sub_intents
-6. **意图澄清**：当用户表述模糊、信息不足、置信度低于 0.72 或 category 为 other 时，必须设置 needs_clarification=true，并：
-   - 生成 guide_response（客服引导话术）
-   - 给出 clarification_questions（1-3 个具体追问，每项含 question_id、question、purpose、fills_slot）
-   - 给出 options（2-5 个可选方向）
-7. **澄清回复 refinement**：若上下文显示「澄清进行中」，用户当前输入是对追问的回答，必须：
-   - 结合 original_utterance + 用户补充，给出 refined 精确意图
-   - needs_clarification 设为 false，confidence 应 ≥ 0.85
-   - reasoning 中说明澄清前后意图变化
+## Core Principles
+1. **Dynamic capture**: Do not mechanically apply fixed labels; use natural language to precisely describe the user's current intent (intent_label) in English
+2. **Reference categories**: Select the closest category from the reference list above (code); refinement and combination are allowed
+3. **Multi-turn understanding**: Use conversation history to resolve references ("it/this/that" — which product?) and inherit context
+4. **Implicit mining**: Identify unstated but inferable needs (e.g., "frequent business travel" → may need accident insurance)
+5. **Multiple intents**: When one utterance contains multiple questions, split into sub_intents
+6. **Intent clarification**: When the user's statement is vague, information is insufficient, confidence is below 0.72, or category is other, you must set needs_clarification=true and:
+   - Generate guide_response (customer service guidance in English)
+   - Provide clarification_questions (1-3 specific follow-ups, each with question_id, question, purpose, fills_slot)
+   - Provide options (2-5 possible directions)
+7. **Clarification refinement**: If context shows clarification is in progress and the current input is the user's answer to a follow-up, you must:
+   - Combine original_utterance + user supplement to produce a refined precise intent
+   - Set needs_clarification to false; confidence should be ≥ 0.85
+   - Explain the before/after intent change in reasoning
 
-## 输出要求
-必须只输出 JSON 对象，不要 markdown 代码块：
+## Output Requirements
+Output only a JSON object — no markdown code blocks:
 {{
   "primary_intent": {{
-    "intent_label": "用一句中文精确描述用户意图，如：查询安心保重疾险的等待期",
-    "category": "参考分类 code，如 coverage_terms",
+    "intent_label": "One precise English sentence describing user intent, e.g.: Query the waiting period for Anxin Critical Illness 2026",
+    "category": "reference category code, e.g. coverage_terms",
     "confidence": 0.0-1.0
   }},
   "sub_intents": [
     {{"intent_label": "...", "category": "...", "confidence": 0.0-1.0, "is_primary": false}}
   ],
   "implicit_intents": [
-    {{"intent_label": "...", "category": "...", "trigger": "触发隐式推断的原文片段", "confidence": 0.0-1.0}}
+    {{"intent_label": "...", "category": "...", "trigger": "source text fragment that triggered implicit inference", "confidence": 0.0-1.0}}
   ],
-  "slots": {{"槽位名": "值或null"}},
+  "slots": {{"slot_name": "value or null"}},
   "drift_detected": false,
-  "drift_reason": "若检测到话题切换则说明原因，否则空字符串",
-  "missing_info": ["完成该意图还需追问的信息，如 product_name, age"],
-  "reasoning": "简短推理链（指代消解、意图判断依据）",
+  "drift_reason": "If topic shift detected, explain why; otherwise empty string",
+  "missing_info": ["information still needed to fulfill intent, e.g. product_name, age"],
+  "reasoning": "Brief reasoning chain (reference resolution, intent judgment basis)",
   "clarification": {{
     "needs_clarification": true,
     "reason": "vague_utterance/missing_info/low_confidence/ambiguous/unrecognized",
-    "guide_response": "亲切自然的客服引导话术，直接对用户说，帮助其明确意图",
+    "guide_response": "Friendly, natural customer service guidance in English — speak directly to the user to help clarify intent",
     "clarification_questions": [
-      {{"question_id": "q1", "question": "具体追问问题", "purpose": "追问目的", "fills_slot": "product_name"}}
+      {{"question_id": "q1", "question": "specific follow-up question", "purpose": "purpose of the question", "fills_slot": "product_name"}}
     ],
-    "options": ["选项1：...", "选项2：..."],
-    "follow_up_questions": ["追问1", "追问2"]
+    "options": ["Option 1: ...", "Option 2: ..."],
+    "follow_up_questions": ["follow-up 1", "follow-up 2"]
   }}
 }}
 """
 
 
 class LLMIntentEngine:
-    """Chain-of-Intent — 动态意图捕获，非固定分类（OpenAI 兼容 API）。"""
+    """Chain-of-Intent — dynamic intent capture, not fixed taxonomy (OpenAI-compatible API)."""
 
     def __init__(self) -> None:
         self.config = settings.llm
@@ -110,7 +110,7 @@ class LLMIntentEngine:
             try:
                 result = self._call_llm_sync(utterance, context_window, ctx)
             except Exception as exc:
-                logger.warning("%s 同步调用失败，降级: %s", self.config.display_name, exc)
+                logger.warning("%s sync call failed, falling back: %s", self.config.display_name, exc)
                 result = self._fallback_predict(utterance, ctx)
         else:
             result = self._fallback_predict(utterance, ctx)
@@ -127,7 +127,7 @@ class LLMIntentEngine:
             try:
                 return await self._call_llm(utterance, context_window, ctx)
             except Exception as exc:
-                logger.warning("%s 调用失败，降级: %s", self.config.display_name, exc)
+                logger.warning("%s call failed, falling back: %s", self.config.display_name, exc)
         return self._fallback_predict(utterance, ctx)
 
     def _build_system_prompt(self) -> str:
@@ -135,9 +135,9 @@ class LLMIntentEngine:
 
     def _build_messages(self, utterance: str, context_window: str, ctx: SessionContext) -> list:
         user_msg = (
-            f"对话上下文：\n{context_window}\n\n"
-            f"用户画像线索：{ctx.user_profile_hints or '无'}\n\n"
-            f"用户最新输入：{utterance}"
+            f"Conversation context:\n{context_window}\n\n"
+            f"User profile hints: {ctx.user_profile_hints or 'none'}\n\n"
+            f"User's latest input: {utterance}"
         )
         return [
             {"role": "system", "content": self._build_system_prompt()},
@@ -188,7 +188,7 @@ class LLMIntentEngine:
             return self._parse_llm_response(content)
 
     def _fallback_predict(self, utterance: str, ctx: SessionContext) -> IntentResult:
-        """无 LLM 时的最小降级 — 仅做关键词粗匹配 + 参考分类。"""
+        """Minimal fallback when LLM is unavailable — keyword coarse match + reference category only."""
         from src.engines.entity_extractor import EntityExtractor
 
         extractor = EntityExtractor()
@@ -202,7 +202,7 @@ class LLMIntentEngine:
             source=IntentSource.LLM,
             sub_intents=[SubIntent(intent_label=label, category=category, confidence=conf, is_primary=True)],
             slots=slots,
-            reasoning=f"规则降级推断（{self.config.display_name} 不可用）",
+            reasoning=f"Rule-based fallback inference ({self.config.display_name} unavailable)",
         )
 
     def _parse_llm_response(self, content: str) -> IntentResult:
@@ -216,11 +216,11 @@ class LLMIntentEngine:
         except json.JSONDecodeError:
             match = re.search(r"\{.*\}", text, re.DOTALL)
             if not match:
-                raise ValueError(f"无法解析 LLM JSON: {content[:200]}")
+                raise ValueError(f"Failed to parse LLM JSON: {content[:200]}")
             data = json.loads(match.group())
 
         primary = data.get("primary_intent") or {}
-        intent_label = primary.get("intent_label") or "未能识别用户意图"
+        intent_label = primary.get("intent_label") or "Could not recognize user intent"
         category = self._normalize_category(primary.get("category", "other"))
         confidence = float(primary.get("confidence", 0.5))
 

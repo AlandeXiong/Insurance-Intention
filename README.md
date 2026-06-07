@@ -1,82 +1,82 @@
-# 多轮对话意图捕捉系统
+# Multi-Turn Dialogue Intent Recognition System
 
-面向**保险智能营销与客服**场景的多轮对话意图识别系统。采用 **LLM 动态意图捕获 + 保险行业参考分类框架**，支持指代消解、意图漂移检测、结构化澄清引导与澄清回复 refinement。
+An industrial multi-turn intent recognition system for **insurance smart marketing and customer service**. It uses **LLM dynamic intent capture + an insurance industry reference taxonomy**, with coreference resolution, intent drift detection, structured clarification guidance, and clarification reply refinement.
 
-## 核心特性
+## Key Features
 
-- **动态意图捕获**：DeepSeek / 阿里云千问 大模型理解用户真实诉求，输出自然语言意图描述，非固定枚举分类
-- **保险行业参考框架**：12 类常见客户意图供 LLM 参考（产品咨询、保费询价、理赔服务等）
-- **多轮上下文管理**：指代消解、槽位跨轮继承、主题栈追踪
-- **意图澄清闭环**：模糊输入 → 结构化追问 → 用户回复 → 意图 refinement
-- **意图漂移检测**：识别话题切换，区分相关意图链内切换
-- **双入口**：交互式 CLI + FastAPI 生产接口
+- **Dynamic intent capture**: DeepSeek / Alibaba Cloud Qwen LLMs understand user intent in natural language — not fixed enum labels
+- **Insurance reference framework**: 12 common customer intent categories for LLM guidance (product inquiry, premium quote, claims service, etc.)
+- **Multi-turn context management**: Coreference resolution, cross-turn slot inheritance, topic stack tracking
+- **Clarification loop**: vague input → structured follow-up → user reply → intent refinement
+- **Intent drift detection**: Detect topic shifts; distinguish in-chain related intent switches
+- **Dual entry points**: Interactive CLI + FastAPI production API
 
-## 快速开始
+## Quick Start
 
 ```bash
-# 安装依赖
+# Install dependencies
 pip install -r requirements.txt
 
-# 配置 LLM API（复制并编辑）
+# Configure LLM API (copy and edit)
 cp .env.example .env
 # DeepSeek: LLM_PROVIDER=deepseek + DEEPSEEK_API_KEY
-# 千问:     LLM_PROVIDER=qwen + DASHSCOPE_API_KEY
+# Qwen:     LLM_PROVIDER=qwen + DASHSCOPE_API_KEY
 
-# 交互式多轮对话
+# Interactive multi-turn chat
 python chat.py
 
-# 预设场景演示
+# Preset scenario demo
 python main.py --mode demo
 
-# 自动化测试
+# Automated tests
 python tests/run_tests.py
 
-# 启动 API 服务
+# Start API server
 uvicorn api.server:app --host 0.0.0.0 --port 8000
 ```
 
-## 项目结构
+## Project Structure
 
 ```
 intention/
-├── config/settings.py          # 系统配置（延迟预算、LLM、澄清阈值）
+├── config/settings.py          # System config (latency budget, LLM, clarification thresholds)
 ├── src/
-│   ├── pipeline.py             # 主管道编排
-│   ├── domain/                 # 保险领域参考框架
-│   ├── engines/                # LLM 引擎 + 实体抽取
-│   ├── context/                # 上下文管理与指代消解
-│   ├── clarification/          # 澄清引导 + 澄清回复 refinement
-│   ├── drift/                  # 意图漂移检测
-│   └── models/                 # 数据模型
-├── api/server.py               # FastAPI 接口
-├── chat.py                     # 交互式对话入口
-├── main.py                     # 演示入口
-├── tests/                      # 自动化测试
+│   ├── pipeline.py             # Main pipeline orchestration
+│   ├── domain/                 # Insurance domain reference framework
+│   ├── engines/                # LLM engine + entity extraction
+│   ├── context/                # Context management and coreference resolution
+│   ├── clarification/          # Clarification guidance + reply refinement
+│   ├── drift/                  # Intent drift detection
+│   └── models/                 # Data models
+├── api/server.py               # FastAPI endpoints
+├── chat.py                     # Interactive chat entry point
+├── main.py                     # Demo entry point
+├── tests/                      # Automated tests
 └── docs/
-    └── ARCHITECTURE.md         # 架构与技术文档（详细）
+    └── ARCHITECTURE.md         # Architecture and technical documentation
 ```
 
-## 文档
+## Documentation
 
-| 文档 | 说明 |
-|------|------|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 整体架构、技术路线、实现思路 |
-| [.env.example](.env.example) | 环境变量配置说明 |
+| Document | Description |
+|----------|-------------|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Overall architecture, technical approach, implementation details |
+| [.env.example](.env.example) | Environment variable reference |
 
-## 环境变量
+## Environment Variables
 
-| 变量 | 说明 | 默认值 |
-|------|------|--------|
-| `LLM_PROVIDER` | LLM 提供商：`deepseek` / `qwen` | `deepseek` |
-| `DEEPSEEK_API_KEY` | DeepSeek API Key（provider=deepseek） | — |
-| `DEEPSEEK_MODEL` | DeepSeek 模型 | `deepseek-chat` |
-| `DASHSCOPE_API_KEY` | 阿里云 DashScope Key（provider=qwen） | — |
-| `QWEN_MODEL` | 千问模型 | `qwen-plus` |
-| `QWEN_API_BASE` | 千问 OpenAI 兼容端点 | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
-| `LLM_TIMEOUT_S` | 请求超时（秒） | `30` |
-| `CLARIFICATION_CONFIDENCE_THRESHOLD` | 澄清触发置信度阈值 | `0.72` |
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `LLM_PROVIDER` | LLM provider: `deepseek` / `qwen` | `deepseek` |
+| `DEEPSEEK_API_KEY` | DeepSeek API key (when provider=deepseek) | — |
+| `DEEPSEEK_MODEL` | DeepSeek model name | `deepseek-chat` |
+| `DASHSCOPE_API_KEY` | Alibaba DashScope key (when provider=qwen) | — |
+| `QWEN_MODEL` | Qwen model name | `qwen-plus` |
+| `QWEN_API_BASE` | Qwen OpenAI-compatible endpoint | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
+| `LLM_TIMEOUT_S` | Request timeout (seconds) | `30` |
+| `CLARIFICATION_CONFIDENCE_THRESHOLD` | Clarification trigger confidence threshold | `0.72` |
 
-### 切换千问示例
+### Switching to Qwen
 
 ```bash
 # .env
@@ -84,31 +84,31 @@ LLM_PROVIDER=qwen
 DASHSCOPE_API_KEY=sk-your-dashscope-key
 QWEN_MODEL=qwen-plus
 
-# 连通性测试
+# Connectivity test
 python scripts/test_llm.py
 ```
 
-## API 示例
+## API Examples
 
 ```bash
-# 意图识别
+# Intent recognition
 curl -X POST http://localhost:8000/v1/intent/predict/sync \
   -H "Content-Type: application/json" \
-  -d '{"utterance": "那它的等待期是多久？", "session_id": "user-001"}'
+  -d '{"utterance": "How long is its waiting period?", "session_id": "user-001"}'
 
-# 获取参考分类
+# List reference categories
 curl http://localhost:8000/v1/intent/categories
 ```
 
-## 技术指标（设计目标）
+## Target Metrics (Design Goals)
 
-| 指标 | 目标 |
-|------|------|
-| 意图识别准确率 | ≥ 95% |
-| 意图漂移检测率 | ≥ 92% |
-| 多意图识别准确率 | ≥ 88% |
-| 端到端延迟（含 LLM） | ≤ 600ms（轻量路径） / 1–3s（LLM 路径） |
+| Metric | Target |
+|--------|--------|
+| Intent recognition accuracy | ≥ 95% |
+| Intent drift detection rate | ≥ 92% |
+| Multi-intent recognition accuracy | ≥ 88% |
+| End-to-end latency (incl. LLM) | ≤ 600ms (lightweight path) / 1–3s (LLM path) |
 
-## 技术栈
+## Tech Stack
 
-Python 3.10+ · Pydantic · httpx · FastAPI · DeepSeek / 阿里云千问 API（OpenAI 兼容）
+Python 3.10+ · Pydantic · httpx · FastAPI · DeepSeek / Alibaba Cloud Qwen API (OpenAI-compatible)

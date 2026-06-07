@@ -1,3 +1,3 @@
-"""多轮对话意图捕捉系统 — 保险智能客服场景。"""
+"""Multi-turn dialogue intent capture system — insurance intelligent customer service."""
 
 __version__ = "1.0.0"

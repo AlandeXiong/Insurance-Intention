@@ -1,4 +1,4 @@
-"""意图决策与融合模块。"""
+"""Intent decision and fusion module."""
 
 from __future__ import annotations
 
@@ -10,10 +10,10 @@ from src.models.intent import IntentResult, IntentSource, Slot, SubIntent
 
 class IntentFusionEngine:
     """
-    双引擎融合策略（2026 工业实践）：
-    - 轻量引擎高置信 → 直接采纳，LLM 作校验
-    - 低置信 → LLM 主导，轻量引擎加权
-    - 冲突 → 取置信更高者，标记需人工复核
+    Dual-engine fusion strategy (2026 production practice):
+    - High-confidence lightweight result → adopt directly, LLM validates
+    - Low confidence → LLM leads, lightweight weighted in
+    - Conflict → take higher confidence, flag for human review
     """
 
     def __init__(self, fusion_min: float | None = None) -> None:
@@ -31,7 +31,7 @@ class IntentFusionEngine:
         lw_conf = lightweight.confidence
         llm_conf = llm.confidence
 
-        # 轻量引擎高置信快速路径
+        # Lightweight high-confidence fast path
         if lw_conf >= settings.lightweight_confidence_threshold and lw_conf >= llm_conf:
             fused = self._build_fused(lightweight, llm, lw_weight=0.7, llm_weight=0.3)
         elif llm_conf >= self.fusion_min:

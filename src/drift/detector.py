@@ -1,4 +1,4 @@
-"""意图漂移检测 — 多信号融合（SOTA 工业实践）。"""
+"""Intent drift detection — multi-signal fusion (production SOTA practice)."""
 
 from __future__ import annotations
 
@@ -11,28 +11,30 @@ from src.domain.insurance_domain import get_category_name
 from src.drift.category_graph import graph_distance, is_related_switch
 from src.models.intent import DriftType, IntentResult, SessionContext
 
-# 显式话题切换标记
+# Explicit topic-shift markers
 TOPIC_SHIFT_MARKERS = [
-    "另外", "换个话题", "还想问", "再问", "顺便", "对了",
-    "不对", "不是", "算了", "不问了", "换个问题",
+    "by the way", "change topic", "also want to ask", "another question", "incidentally",
+    "actually no", "not that", "never mind", "forget it", "different question",
+    "on another note", "switching topics", "also tell me", "also want to know",
+    "another thing", "one more thing", "separately",
 ]
 
-# 澄清/追问标记 — 非漂移
+# Clarification / follow-up markers — not drift
 CLARIFICATION_MARKERS = [
-    "什么意思", "不太懂", "再说一遍", "解释", "具体是",
-    "为什么", "怎么理解", "能详细", "听不懂",
+    "what do you mean", "don't understand", "say again", "explain", "specifically",
+    "why", "how to understand", "more detail", "don't get it",
 ]
 
-# 延续/指代标记 — 强上下文依赖，非漂移
+# Continuation / reference markers — strong context dependency, not drift
 CONTINUATION_MARKERS = [
-    "它", "这个", "那个", "这款", "还有", "呢", "吗",
-    "刚才", "上面", "之前", "继续",
+    "it", "this", "that", "this plan", "and also", "right",
+    "just now", "above", "before", "continue", "what about",
 ]
 
 
 @dataclass
 class DriftSignals:
-    """各检测信号分量 — 可解释、可调试。"""
+    """Per-signal drift components — interpretable and debuggable."""
     category_distance: float = 0.0
     utterance_semantic_shift: float = 0.0
     intent_label_shift: float = 0.0
@@ -59,12 +61,12 @@ class DriftSignals:
 
 class IntentDriftDetector:
     """
-    五层融合漂移检测（对齐 SITS/Rasa CALM/Forth AI 工业实践）：
-    1. 分类图距离
-    2. 话语语义偏移（n-gram 相似度）
-    3. 意图描述语义偏移
-    4. 主题栈/产品焦点一致性
-    5. 显式标记 + LLM 信号融合
+    Five-layer fused drift detection (aligned with SITS / Rasa CALM / Forth AI practice):
+    1. Category graph distance
+    2. Utterance semantic shift (n-gram similarity)
+    3. Intent label semantic shift
+    4. Topic stack / product focus consistency
+    5. Explicit markers + LLM signal fusion
     """
 
     DEFAULT_WEIGHTS = {
@@ -107,7 +109,7 @@ class IntentDriftDetector:
             drift_type = DriftType.CLARIFICATION if self._is_clarification(utterance) else DriftType.SUB_INTENT_SWITCH
             return False, drift_type, signals.fused_score, signals
 
-        if any(m in utterance for m in CONTINUATION_MARKERS) and signals.fused_score < self.threshold + 0.15:
+        if any(m in utterance.lower() for m in CONTINUATION_MARKERS) and signals.fused_score < self.threshold + 0.15:
             return False, DriftType.SUB_INTENT_SWITCH, signals.fused_score, signals
 
         drifted = signals.fused_score >= self.threshold
@@ -172,10 +174,11 @@ class IntentDriftDetector:
         if ctx.active_product and new_product_val and str(new_product_val) != ctx.active_product:
             sig.product_focus_change = 0.8
 
-        if any(m in utterance for m in TOPIC_SHIFT_MARKERS):
+        utterance_lower = utterance.lower()
+        if any(m in utterance_lower for m in TOPIC_SHIFT_MARKERS):
             sig.explicit_marker_boost = 0.35
 
-        if any(m in utterance for m in CONTINUATION_MARKERS):
+        if any(m in utterance_lower for m in CONTINUATION_MARKERS):
             sig.continuation_penalty = 0.25
 
         if result.drift_detected:
@@ -196,7 +199,7 @@ class IntentDriftDetector:
             + w["llm_drift_signal"] * sig.llm_drift_signal
             - sig.continuation_penalty
         )
-        # 显式换题标记 + 分类跳变 → 高置信漂移（工业规则增强）
+        # Explicit topic-shift marker + category jump → high-confidence drift (production rule boost)
         if sig.explicit_marker_boost > 0 and sig.category_distance >= 0.3:
             score = max(score, 0.58)
         if sig.llm_drift_signal > 0 and sig.category_distance >= 0.2:
@@ -205,7 +208,8 @@ class IntentDriftDetector:
 
     @staticmethod
     def _is_clarification(utterance: str) -> bool:
-        return any(m in utterance for m in CLARIFICATION_MARKERS)
+        utterance_lower = utterance.lower()
+        return any(m in utterance_lower for m in CLARIFICATION_MARKERS)
 
     @staticmethod
     def _is_return_to_prior_topic(ctx: SessionContext, new_category: str) -> bool:
@@ -217,12 +221,12 @@ class IntentDriftDetector:
     def _build_reason(ctx: SessionContext, result: IntentResult, signals: DriftSignals) -> str:
         from_name = get_category_name(ctx.active_category or "")
         to_name = get_category_name(result.category)
-        parts = [f"从「{ctx.active_intent_label}」({from_name}) 切换到「{result.intent_label}」({to_name})"]
+        parts = [f"Switched from \"{ctx.active_intent_label}\" ({from_name}) to \"{result.intent_label}\" ({to_name})"]
         if signals.explicit_marker_boost > 0:
-            parts.append("含显式换题标记")
+            parts.append("contains explicit topic-shift marker")
         if signals.product_focus_change > 0:
-            parts.append("产品焦点变更")
+            parts.append("product focus changed")
         if signals.llm_drift_signal > 0:
-            parts.append("LLM 判定话题切换")
-        parts.append(f"融合分={signals.fused_score:.2f}")
-        return "；".join(parts)
+            parts.append("LLM detected topic shift")
+        parts.append(f"fused score={signals.fused_score:.2f}")
+        return "; ".join(parts)

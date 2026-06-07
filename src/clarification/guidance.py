@@ -1,4 +1,4 @@
-"""意图澄清引导 — 检测模糊意图并生成客服引导话术。"""
+"""Intent clarification guidance — detect vague intents and generate agent guidance copy."""
 
 from __future__ import annotations
 
@@ -10,127 +10,132 @@ from src.domain.insurance_domain import CATEGORY_BY_CODE, get_category_name
 from src.models.clarification import ClarificationGuide, ClarificationQuestion, ClarificationReason, PendingClarification
 from src.models.intent import IntentResult, SessionContext
 
-# 模糊表述特征
+# Vague utterance patterns
 VAGUE_PATTERNS = [
-    r"^(了解|咨询|问问|想知道|帮我|看看).{0,6}$",
-    r"^(那个|这个|它).{0,8}$",
-    r"^怎么(办|样|弄)$",
-    r"^有关?保险",
-    r"^关于",
+    r"^(learn|inquire|ask|want to know|help me|look into).{0,20}$",
+    r"^(that|this|it)( one| product| plan)?\.?$",
+    r"^how (do i|can i|does it work)\??$",
+    r"^about (the )?insurance",
+    r"^regarding",
 ]
 
-# 槽位名 → 中文追问
+# Slot name → English follow-up labels (runtime user-facing)
 SLOT_LABELS = {
-    "product_name": "想了解哪款保险产品",
-    "product_a": "第一款对比产品",
-    "product_b": "第二款对比产品",
-    "age": "您的年龄",
-    "gender": "您的性别",
-    "coverage_amount": "期望的保额（如50万）",
-    "payment_period": "计划缴费年限",
-    "budget": "预算范围",
-    "insurance_type": "险种类型（重疾/医疗/意外/寿险）",
-    "claim_type": "理赔类型（住院/门诊/手术等）",
-    "policy_no": "保单号",
-    "scenario": "使用场景（如出差、育儿、养老）",
+    "product_name": "which insurance product you'd like to learn about",
+    "product_a": "first product to compare",
+    "product_b": "second product to compare",
+    "age": "your age",
+    "gender": "your gender",
+    "coverage_amount": "desired coverage amount (e.g., $500K)",
+    "payment_period": "planned payment term",
+    "budget": "budget range",
+    "insurance_type": "insurance type (critical illness / medical / accident / life)",
+    "claim_type": "claim type (inpatient / outpatient / surgery, etc.)",
+    "policy_no": "policy number",
+    "scenario": "use case (e.g., business travel, parenting, retirement)",
 }
 
-# 参考分类 → 缺信息时的引导模板
+# Reference category → guidance templates when info is missing (runtime user-facing)
 CATEGORY_GUIDE_TEMPLATES = {
     "product_inquiry": (
-        "您好！我可以帮您介绍保险产品的保障内容。"
-        "请问您想了解哪个险种？例如：重疾险、医疗险、意外险或寿险？"
+        "Hello! I can help you learn about insurance product coverage. "
+        "Which type of insurance are you interested in? For example: critical illness, "
+        "medical, accident, or life insurance?"
     ),
     "premium_inquiry": (
-        "您好！保费会根据产品、年龄、保额和缴费方式有所不同。"
-        "请问您想了解哪款产品的保费？或者告诉我您的年龄和期望保额，我来帮您估算。"
+        "Hello! Premiums vary by product, age, coverage amount, and payment method. "
+        "Which product's premium would you like to check? Or share your age and desired "
+        "coverage amount and I can estimate it for you."
     ),
     "coverage_terms": (
-        "您好！关于保障条款，不同产品规则不同。"
-        "请问您想查询哪款产品？是想了解等待期、免责条款还是续保规则？"
+        "Hello! Coverage terms differ by product. "
+        "Which product would you like to ask about? Are you looking for the waiting period, "
+        "exclusions, or renewal rules?"
     ),
     "claims_service": (
-        "您好！我可以为您介绍理赔流程。"
-        "请问您是哪个险种的理赔（医疗/重疾/意外）？是否已有保单？"
+        "Hello! I can walk you through the claims process. "
+        "Which type of insurance claim is this (medical / critical illness / accident)? "
+        "Do you already have a policy?"
     ),
     "purchase": (
-        "您好！很高兴您有投保意向。"
-        "请问您想购买哪类产品？是否已有心仪的产品名称？"
+        "Hello! Glad to hear you're interested in purchasing coverage. "
+        "Which type of product are you looking for? Do you already have a product in mind?"
     ),
     "product_compare": (
-        "您好！我可以帮您对比保险产品。"
-        "请告诉我您想对比哪两款产品，或说明您关注的对比维度（保费/保障/理赔）。"
+        "Hello! I can help you compare insurance products. "
+        "Tell me which two products you'd like to compare, or what matters most "
+        "(premium / coverage / claims)."
     ),
     "policy_service": (
-        "您好！请问您需要办理哪项保单服务？"
-        "例如：续保、退保、变更受益人，或查询保单信息。"
+        "Hello! Which policy service do you need help with? "
+        "For example: renewal, surrender, beneficiary change, or policy lookup."
     ),
     "product_recommend": (
-        "您好！我可以根据您的情况推荐合适的保险。"
-        "请问您的年龄是多少？主要关注哪方面保障（健康/意外/养老/子女教育）？"
+        "Hello! I can recommend suitable insurance based on your situation. "
+        "How old are you? What coverage matters most (health / accident / retirement / children's education)?"
     ),
     "other": (
-        "您好！为了更好地帮助您，我需要再确认一下您的需求。"
-        "请问您想了解以下哪方面？"
+        "Hello! To help you better, I need to confirm your request. "
+        "Which of the following are you interested in?"
     ),
 }
 
-# 参考分类 → 结构化澄清问题模板
+# Reference category → structured clarification question templates (runtime user-facing)
 CATEGORY_CLARIFICATION_QUESTIONS: dict[str, list[tuple[str, str, str | None]]] = {
     "product_inquiry": [
-        ("q_insurance_type", "您想了解哪类保险？例如重疾险、医疗险、意外险还是寿险？", "insurance_type"),
-        ("q_product_name", "您是否有具体的产品名称？", "product_name"),
+        ("q_insurance_type", "Which type of insurance are you interested in? Critical illness, medical, accident, or life?", "insurance_type"),
+        ("q_product_name", "Do you have a specific product name in mind?", "product_name"),
     ],
     "premium_inquiry": [
-        ("q_product", "请问您想查询哪款产品的保费？", "product_name"),
-        ("q_age_coverage", "请告知您的年龄和期望保额（如30岁、50万），方便估算。", "age"),
+        ("q_product", "Which product's premium would you like to check?", "product_name"),
+        ("q_age_coverage", "Please share your age and desired coverage amount (e.g., age 30, $500K) so I can estimate.", "age"),
     ],
     "coverage_terms": [
-        ("q_product", "请问您想查询哪款产品？", "product_name"),
-        ("q_clause", "您想了解等待期、免责条款还是续保规则？", "clause_type"),
+        ("q_product", "Which product would you like to ask about?", "product_name"),
+        ("q_clause", "Are you asking about the waiting period, exclusions, or renewal rules?", "clause_type"),
     ],
     "claims_service": [
-        ("q_insurance_type", "请问是哪种险种的理赔？医疗险、重疾险还是意外险？", "claim_type"),
-        ("q_claim_detail", "请问是住院、门诊还是其他类型的理赔？", "claim_type"),
+        ("q_insurance_type", "Which type of insurance claim is this? Medical, critical illness, or accident?", "claim_type"),
+        ("q_claim_detail", "Is this for inpatient, outpatient, or another type of claim?", "claim_type"),
     ],
     "product_compare": [
-        ("q_products", "请告诉我您想对比哪两款产品？", "product_a"),
-        ("q_dimension", "您主要关注保费、保障范围还是理赔条件？", "compare_dimension"),
+        ("q_products", "Which two products would you like to compare?", "product_a"),
+        ("q_dimension", "Do you care most about premium, coverage scope, or claims conditions?", "compare_dimension"),
     ],
     "product_recommend": [
-        ("q_scenario", "请问您的主要场景是什么？如育儿、养老、出差出行？", "scenario"),
-        ("q_age", "请问您的年龄是多少？", "age"),
+        ("q_scenario", "What is your main scenario? Parenting, retirement, business travel?", "scenario"),
+        ("q_age", "How old are you?", "age"),
     ],
     "purchase": [
-        ("q_product", "请问您想购买哪款产品？", "product_name"),
-        ("q_insurance_type", "或者您想购买哪类保险？", "insurance_type"),
+        ("q_product", "Which product would you like to purchase?", "product_name"),
+        ("q_insurance_type", "Or which type of insurance are you looking for?", "insurance_type"),
     ],
     "policy_service": [
-        ("q_service_type", "请问您需要办理续保、退保、变更还是查询保单？", "service_type"),
-        ("q_policy_no", "如有保单号请提供，方便快速查询。", "policy_no"),
+        ("q_service_type", "Do you need renewal, surrender, a change, or a policy lookup?", "service_type"),
+        ("q_policy_no", "If you have a policy number, please share it for a faster lookup.", "policy_no"),
     ],
 }
 
-# 意图不明时的通用选项
+# Default options when intent is unclear (runtime user-facing)
 DEFAULT_OPTIONS = [
-    "了解某款保险产品的保障内容",
-    "查询保费或费率",
-    "咨询理赔流程或申请理赔",
-    "对比不同保险产品",
-    "根据我的情况推荐合适的保险",
-    "办理续保、退保等保单服务",
+    "Learn about coverage for a specific insurance product",
+    "Check premium or rates",
+    "Ask about the claims process or file a claim",
+    "Compare different insurance products",
+    "Get a recommendation based on my situation",
+    "Handle renewal, surrender, or other policy services",
 ]
 
-# 通用澄清问题（意图完全不明时）
+# Default clarification questions when intent is fully unclear (runtime user-facing)
 DEFAULT_CLARIFICATION_QUESTIONS = [
-    ("q_intent", "您主要想了解保险哪方面？产品咨询、保费、理赔还是保单服务？", None),
-    ("q_insurance_type", "您关注哪类保险？重疾/医疗/意外/寿险？", "insurance_type"),
-    ("q_product", "您是否有具体的产品名称或保单？", "product_name"),
+    ("q_intent", "What would you like help with? Product info, premium, claims, or policy services?", None),
+    ("q_insurance_type", "Which type of insurance interests you? Critical illness / medical / accident / life?", "insurance_type"),
+    ("q_product", "Do you have a specific product name or policy?", "product_name"),
 ]
 
 
 class ClarificationEngine:
-    """判断是否需要澄清，并生成引导话术。"""
+    """Decide whether clarification is needed and generate guidance copy."""
 
     def __init__(
         self,
@@ -147,7 +152,7 @@ class ClarificationEngine:
     ) -> ClarificationGuide:
         llm_clarification = llm_clarification or {}
 
-        # LLM 已明确给出澄清引导时优先采用
+        # Prefer LLM-provided clarification guidance when explicitly present
         if llm_clarification.get("needs_clarification") and llm_clarification.get("guide_response"):
             questions = self._parse_llm_questions(llm_clarification)
             follow_ups = llm_clarification.get("follow_up_questions") or [q.question for q in questions]
@@ -186,7 +191,7 @@ class ClarificationEngine:
         if self._is_vague(utterance) and result.confidence < 0.85:
             return ClarificationReason.VAGUE_UTTERANCE
 
-        # 分类明确但关键槽位缺失
+        # Category is clear but critical slots are missing
         if self._has_critical_missing_slots(result):
             return ClarificationReason.MISSING_INFO
 
@@ -196,7 +201,7 @@ class ClarificationEngine:
         text = utterance.strip()
         if len(text) <= 4:
             return True
-        return any(re.search(p, text) for p in VAGUE_PATTERNS)
+        return any(re.search(p, text, re.IGNORECASE) for p in VAGUE_PATTERNS)
 
     def _is_ambiguous(self, result: IntentResult) -> bool:
         if len(result.sub_intents) < 2:
@@ -233,25 +238,25 @@ class ClarificationEngine:
 
         if reason == ClarificationReason.VAGUE_UTTERANCE:
             guide = (
-                "您好！我注意到您的描述比较简略，为了更准确地帮到您，"
-                "请问您具体想了解以下哪方面呢？"
+                "Hello! Your message is a bit brief, so I'd like to understand you better. "
+                "Which of the following are you interested in?"
             )
         elif reason == ClarificationReason.UNRECOGNIZED:
             guide = (
-                "抱歉，我还不太确定您的具体需求。"
-                "作为保险智能客服，我可以帮您处理以下常见问题，请选择或补充说明："
+                "Sorry, I'm not quite sure what you need yet. "
+                "As your insurance assistant, I can help with the following — please choose or add details:"
             )
         elif reason == ClarificationReason.LOW_CONFIDENCE:
             guide = (
-                f"您好！我理解您可能是想「{result.intent_label}」，"
-                f"但还不太确定。能否请您再具体说明一下？"
+                f"Hello! I think you may want to \"{result.intent_label}\", "
+                f"but I'm not fully sure yet. Could you tell me a bit more?"
             )
         elif reason == ClarificationReason.AMBIGUOUS:
             labels = [s.intent_label for s in result.sub_intents[:3]]
             guide = (
-                "您好！我注意到您的问题可能包含多个方面："
-                + "；".join(labels)
-                + "。请问您想先了解哪一个？"
+                "Hello! Your question may cover several topics: "
+                + "; ".join(labels)
+                + ". Which one would you like to start with?"
             )
         elif reason == ClarificationReason.MISSING_INFO:
             guide = self._build_missing_info_guide(result, ctx)
@@ -277,17 +282,17 @@ class ClarificationEngine:
         base = CATEGORY_GUIDE_TEMPLATES.get(result.category, "")
         missing = result.missing_info or self._infer_missing_slots(result)
         if not missing:
-            return base or "您好！还需要您补充一些信息，以便我更好地为您服务。"
+            return base or "Hello! I still need a bit more information to help you better."
 
         parts = []
         for item in missing[:3]:
             label = SLOT_LABELS.get(item, item)
             parts.append(label)
 
-        missing_text = "、".join(parts)
+        missing_text = ", ".join(parts)
         if base:
-            return f"{base}\n\n另外，还需要您提供：{missing_text}。"
-        return f"您好！为了准确处理您的「{result.intent_label}」，请问您能告诉我{missing_text}吗？"
+            return f"{base}\n\nI also need: {missing_text}."
+        return f"Hello! To handle your \"{result.intent_label}\" request accurately, could you share {missing_text}?"
 
     def _infer_missing_slots(self, result: IntentResult) -> List[str]:
         critical = {
@@ -308,7 +313,7 @@ class ClarificationEngine:
         if reason == ClarificationReason.MISSING_INFO:
             cat = CATEGORY_BY_CODE.get(result.category)
             if cat and cat.examples:
-                return [f"例如：{cat.examples[0]}"] + cat.examples[1:3]
+                return [f"e.g.: {cat.examples[0]}"] + cat.examples[1:3]
             return DEFAULT_OPTIONS[:3]
 
         return DEFAULT_OPTIONS[:4]
@@ -320,11 +325,11 @@ class ClarificationEngine:
         missing = result.missing_info or self._infer_missing_slots(result)
         for slot in missing[:3]:
             label = SLOT_LABELS.get(slot, slot)
-            questions.append(f"请问您的{label}是？")
+            questions.append(f"Could you share your {label}?")
         if not questions and reason == ClarificationReason.VAGUE_UTTERANCE:
             questions = [
-                "您想了解哪类保险（重疾/医疗/意外/寿险）？",
-                "您是否有具体的产品名称？",
+                "Which type of insurance interests you (critical illness / medical / accident / life)?",
+                "Do you have a specific product name in mind?",
             ]
         return questions
 
@@ -337,9 +342,6 @@ class ClarificationEngine:
             "vague": ClarificationReason.VAGUE_UTTERANCE,
             "vague_utterance": ClarificationReason.VAGUE_UTTERANCE,
             "unrecognized": ClarificationReason.UNRECOGNIZED,
-            "模糊": ClarificationReason.VAGUE_UTTERANCE,
-            "信息不足": ClarificationReason.MISSING_INFO,
-            "意图不明": ClarificationReason.UNRECOGNIZED,
         }
         return mapping.get(raw.lower(), ClarificationReason.LOW_CONFIDENCE)
 
@@ -355,8 +357,8 @@ class ClarificationEngine:
             for i, si in enumerate(result.sub_intents[:3], 1):
                 questions.append(ClarificationQuestion(
                     question_id=f"q_ambig_{i}",
-                    question=f"您是想「{si.intent_label}」吗？",
-                    purpose=f"确认是否为{get_category_name(si.category)}",
+                    question=f"Did you mean \"{si.intent_label}\"?",
+                    purpose=f"Confirm whether this is {get_category_name(si.category)}",
                     fills_slot=None,
                     priority=i,
                 ))
@@ -365,21 +367,21 @@ class ClarificationEngine:
         if reason in (ClarificationReason.MISSING_INFO, ClarificationReason.LOW_CONFIDENCE) and templates:
             for i, (qid, qtext, slot) in enumerate(templates, len(questions) + 1):
                 questions.append(ClarificationQuestion(
-                    question_id=qid, question=qtext, purpose="补充关键信息",
+                    question_id=qid, question=qtext, purpose="Fill in key details",
                     fills_slot=slot, priority=i,
                 ))
 
         if reason in (ClarificationReason.VAGUE_UTTERANCE, ClarificationReason.UNRECOGNIZED):
             for i, (qid, qtext, slot) in enumerate(DEFAULT_CLARIFICATION_QUESTIONS, len(questions) + 1):
                 questions.append(ClarificationQuestion(
-                    question_id=qid, question=qtext, purpose="明确用户诉求",
+                    question_id=qid, question=qtext, purpose="Clarify user intent",
                     fills_slot=slot, priority=i,
                 ))
 
         for i, fq in enumerate(follow_ups, len(questions) + 1):
             if not any(q.question == fq for q in questions):
                 questions.append(ClarificationQuestion(
-                    question_id=f"q_follow_{i}", question=fq, purpose="追问细节", priority=i,
+                    question_id=f"q_follow_{i}", question=fq, purpose="Follow up on details", priority=i,
                 ))
 
         return questions[:3]
@@ -389,7 +391,7 @@ class ClarificationEngine:
         if not questions:
             return guide
         q_lines = "\n".join(f"  {i}. {q.question}" for i, q in enumerate(questions, 1))
-        return f"{guide}\n\n为了更准确帮到您，请回答以下问题（可直接回复序号或描述）：\n{q_lines}"
+        return f"{guide}\n\nTo help you more accurately, please answer the following (reply with a number or describe in your own words):\n{q_lines}"
 
     @staticmethod
     def _parse_llm_questions(llm_clarification: dict) -> List[ClarificationQuestion]:
@@ -398,7 +400,7 @@ class ClarificationEngine:
         for i, item in enumerate(raw):
             if isinstance(item, str):
                 questions.append(ClarificationQuestion(
-                    question_id=f"q_llm_{i}", question=item, purpose="LLM 生成追问", priority=i + 1,
+                    question_id=f"q_llm_{i}", question=item, purpose="LLM-generated follow-up", priority=i + 1,
                 ))
             elif isinstance(item, dict) and item.get("question"):
                 questions.append(ClarificationQuestion(
@@ -411,6 +413,6 @@ class ClarificationEngine:
         if not questions:
             for i, fq in enumerate(llm_clarification.get("follow_up_questions") or []):
                 questions.append(ClarificationQuestion(
-                    question_id=f"q_llm_{i}", question=fq, purpose="LLM 追问", priority=i + 1,
+                    question_id=f"q_llm_{i}", question=fq, purpose="LLM follow-up", priority=i + 1,
                 ))
         return questions[:3]

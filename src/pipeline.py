@@ -1,9 +1,9 @@
 """
-多轮对话意图捕捉主管道
-架构：LLM 动态意图捕获 + 实体抽取辅助
+Multi-turn dialogue intent capture pipeline.
+Architecture: LLM dynamic intent capture + entity extraction assist.
 
-用户输入 → 上下文管理/指代消解 → LLM 动态意图分析
-         → 实体槽位合并 → 漂移补充 → 业务输出
+User input → context management / reference resolution → LLM dynamic intent analysis
+          → entity slot merge → drift annotation → business output
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ class PipelineResponse:
 
 
 class IntentPipeline:
-    """LLM 驱动的动态意图识别管道。"""
+    """LLM-driven dynamic intent recognition pipeline."""
 
     def __init__(self) -> None:
         self.context_mgr = ContextManager(max_history_turns=settings.max_history_turns)
@@ -65,7 +65,7 @@ class IntentPipeline:
     def _merge_entity_slots(
         self, result: IntentResult, utterance: str, ctx: SessionContext
     ) -> IntentResult:
-        """LLM 槽位 + 规则实体抽取合并，LLM 优先。"""
+        """Merge LLM slots with rule-based entity extraction; LLM takes precedence."""
         entities = self.entity_extractor.extract_entities(utterance, ctx)
         if result.category == "product_compare":
             entities.update(self.entity_extractor.extract_compare_products(utterance))
@@ -107,7 +107,7 @@ class IntentPipeline:
             result, utterance, ctx, llm_clarification=result.llm_clarification
         )
 
-        # 澄清回复后 refinement：合并原始意图 + 用户补充
+        # Post-clarification refinement: merge original intent + user supplement
         if was_clarification_followup and pending_snapshot:
             result, refinement = self.clarification_resolver.refine_intent_after_clarification(
                 result, pending_snapshot, utterance, resolve_meta
@@ -233,34 +233,34 @@ def format_response(resp: PipelineResponse) -> str:
     intent = resp.intent
     cat_name = resp.metadata.get("category_name", intent.category)
     lines = [
-        f"会话: {resp.session_id}",
-        f"用户输入: {resp.utterance}",
-        f"消解后: {resp.resolved_utterance}",
-        f"意图描述: {intent.intent_label}",
-        f"参考分类: {cat_name} ({intent.category})",
-        f"置信度: {intent.confidence:.2f} | 来源: {intent.source.value} | 路径: {resp.engine_path}",
-        f"延迟: {resp.total_latency_ms:.1f}ms",
+        f"Session: {resp.session_id}",
+        f"User input: {resp.utterance}",
+        f"Resolved: {resp.resolved_utterance}",
+        f"Intent: {intent.intent_label}",
+        f"Reference category: {cat_name} ({intent.category})",
+        f"Confidence: {intent.confidence:.2f} | Source: {intent.source.value} | Path: {resp.engine_path}",
+        f"Latency: {resp.total_latency_ms:.1f}ms",
     ]
     if intent.reasoning:
-        lines.append(f"推理: {intent.reasoning}")
+        lines.append(f"Reasoning: {intent.reasoning}")
     if intent.sub_intents and len(intent.sub_intents) > 1:
         subs = ", ".join(f"{s.intent_label}({s.confidence:.2f})" for s in intent.sub_intents)
-        lines.append(f"子意图: {subs}")
+        lines.append(f"Sub-intents: {subs}")
     if intent.implicit_intents:
         imps = ", ".join(f"{i.intent_label}" for i in intent.implicit_intents)
-        lines.append(f"隐式意图: {imps}")
+        lines.append(f"Implicit intents: {imps}")
     if intent.drift_detected:
-        lines.append(f"意图漂移: {intent.drift_type.value} — {intent.drift_reason}")
+        lines.append(f"Intent drift: {intent.drift_type.value} — {intent.drift_reason}")
     if intent.resolved_references:
-        lines.append(f"指代消解: {intent.resolved_references}")
+        lines.append(f"Coreference: {intent.resolved_references}")
     filled = {k: v.value for k, v in intent.slots.items() if v.value}
     if filled:
-        lines.append(f"槽位: {filled}")
+        lines.append(f"Slots: {filled}")
     if resp.missing_slots:
-        lines.append(f"待澄清: {resp.missing_slots}")
+        lines.append(f"Needs clarification: {resp.missing_slots}")
     if resp.clarification.needs_clarification:
-        lines.append(f"澄清原因: {resp.clarification.reason.value}")
-        lines.append(f"引导回复: {resp.clarification.guide_response}")
+        lines.append(f"Clarification reason: {resp.clarification.reason.value}")
+        lines.append(f"Guide response: {resp.clarification.guide_response}")
         if resp.clarification.suggested_options:
-            lines.append("建议选项: " + " | ".join(resp.clarification.suggested_options))
+            lines.append("Suggested options: " + " | ".join(resp.clarification.suggested_options))
     return "\n".join(lines)

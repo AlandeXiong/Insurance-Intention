@@ -1,4 +1,4 @@
-"""演示多轮对话意图捕捉 — 保险客服典型场景。"""
+"""Demo multi-turn dialogue intent capture — typical insurance customer service scenarios."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
-# 确保项目根目录在 path 中
+# Ensure project root is on sys.path
 ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -20,22 +20,22 @@ def run_demo() -> None:
     session_id = None
 
     scenarios = [
-        ("你好，我想了解一下重疾险", "首轮：问候 + 产品咨询"),
-        ("安心保重疾险2026年保费多少？", "槽位填充：产品 + 保费查询"),
-        ("那它的等待期是多久？", "指代消解：'它' → 安心保"),
-        ("另外医疗险理赔流程是怎样的？", "意图漂移 + 多意图"),
-        ("我最近经常出差", "隐式意图：意外险推荐"),
-        ("帮我对比一下安心保和康乐医疗险Plus", "多槽位：产品对比"),
+        ("Hello, I'd like to learn about critical illness insurance", "Turn 1: Greeting + product inquiry"),
+        ("How much is the premium for Anxin Critical Illness 2026?", "Slot filling: product + premium query"),
+        ("How long is its waiting period?", "Coreference: 'its' → Anxin Critical Illness 2026"),
+        ("Tell me about the medical insurance claims process", "Intent drift + multi-intent"),
+        ("I travel frequently for work", "Implicit intent: accident insurance recommendation"),
+        ("Compare Anxin Critical Illness 2026 and Kangle Medical Plus for me", "Multi-slot: product comparison"),
     ]
 
     print("=" * 60)
-    print("多轮对话意图捕捉演示 — 保险智能客服")
-    print("模式: LLM 动态意图捕获 + 保险行业参考分类")
+    print("Multi-Turn Intent Capture Demo — Insurance Smart Assistant")
+    print("Mode: LLM dynamic intent capture + insurance reference taxonomy")
     llm = settings.llm
     if llm.is_configured:
         print(f"LLM: {llm.display_name} ({llm.model})")
     else:
-        print("LLM: 未配置，使用规则降级")
+        print("LLM: Not configured — using rule fallback")
     print("=" * 60)
 
     for i, (utterance, desc) in enumerate(scenarios, 1):
@@ -45,18 +45,18 @@ def run_demo() -> None:
         print(format_response(resp))
 
     print("\n" + "=" * 60)
-    print("演示完成")
-    print(f"最终会话状态 — 活跃产品: {pipeline.get_or_create_session(session_id).active_product}")
-    print(f"主题栈: {pipeline.get_or_create_session(session_id).topic_stack}")
+    print("Demo complete")
+    print(f"Final session state — active product: {pipeline.get_or_create_session(session_id).active_product}")
+    print(f"Topic stack: {pipeline.get_or_create_session(session_id).topic_stack}")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="多轮对话意图捕捉系统")
+    parser = argparse.ArgumentParser(description="Multi-turn dialogue intent recognition system")
     parser.add_argument(
         "--mode",
         choices=["demo", "chat"],
         default="demo",
-        help="demo=预设场景演示, chat=交互式多轮对话",
+        help="demo=preset scenario demo, chat=interactive multi-turn dialogue",
     )
     args = parser.parse_args()
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""DeepSeek API 连通性测试（兼容入口，推荐使用 scripts/test_llm.py）。"""
+"""DeepSeek API connectivity test (legacy entry point; prefer scripts/test_llm.py)."""
 
 from __future__ import annotations
 

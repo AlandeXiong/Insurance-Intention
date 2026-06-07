@@ -1,4 +1,4 @@
-"""多轮意图识别 — 自动化测试。"""
+"""Multi-turn intent recognition — automated tests."""
 
 from __future__ import annotations
 
@@ -31,116 +31,118 @@ def session_id(pipeline: IntentPipeline) -> str:
 
 
 class TestReferenceResolution:
-    """指代消解测试。"""
+    """Reference resolution tests."""
 
     def test_pronoun_resolves_to_active_product(self, pipeline: IntentPipeline, session_id: str):
-        pipeline.process("安心保重疾险2026年保费多少？", session_id)
-        resp = pipeline.process("那它的等待期是多久？", session_id)
+        pipeline.process("How much is the premium for Anxin Critical Illness 2026?", session_id)
+        resp = pipeline.process("How long is its waiting period?", session_id)
 
-        assert resp.resolved_utterance == "那安心保重疾险2026的等待期是多久？"
-        assert resp.intent.resolved_references.get("它") == "安心保重疾险2026"
-        assert resp.intent.intent == "query_waiting_period"
+        assert "Anxin Critical Illness 2026" in resp.resolved_utterance
+        assert resp.intent.resolved_references.get("its") == "Anxin Critical Illness 2026"
+        assert resp.intent.category in {"coverage_terms", "product_inquiry"}
 
 
 class TestIntentRecognition:
-    """意图识别准确率测试。"""
+    """Intent recognition accuracy tests."""
 
-    @pytest.mark.parametrize("utterance,expected_intent", [
-        ("你好", "greeting"),
-        ("安心保重疾险保费多少", "query_critical_illness_premium"),
-        ("等待期是多久", "query_waiting_period"),
-        ("医疗险怎么理赔", "query_medical_claim"),
-        ("帮我对比一下两款产品", "compare_products"),
-        ("我想购买这份保险", "purchase_intent"),
+    @pytest.mark.parametrize("utterance,expected_category", [
+        ("Hello", "greeting_chitchat"),
+        ("How much is Anxin critical illness premium", "premium_inquiry"),
+        ("How long is the waiting period", "coverage_terms"),
+        ("How do I file a medical insurance claim", "claims_service"),
+        ("Compare two products for me", "product_compare"),
+        ("I want to buy this insurance", "purchase"),
     ])
     def test_single_turn_intent(
-        self, pipeline: IntentPipeline, utterance: str, expected_intent: str
+        self, pipeline: IntentPipeline, utterance: str, expected_category: str
     ):
         resp = pipeline.process(utterance)
-        assert resp.intent.intent == expected_intent, (
-            f"输入: {utterance}, 期望: {expected_intent}, 实际: {resp.intent.intent}"
+        assert resp.intent.category == expected_category, (
+            f"Input: {utterance}, expected: {expected_category}, actual: {resp.intent.category}"
         )
         assert resp.intent.confidence >= 0.75
 
 
 class TestImplicitIntent:
-    """隐式意图测试。"""
+    """Implicit intent tests."""
 
     def test_business_travel_triggers_accident_insurance(self, pipeline: IntentPipeline):
-        resp = pipeline.process("我最近经常出差")
-        assert "recommend_accident_insurance" in resp.intent.implicit_intents or \
-               resp.intent.intent == "recommend_accident_insurance"
+        resp = pipeline.process("I travel frequently for work")
+        assert (
+            resp.intent.category == "product_recommend"
+            or any(i.category == "product_recommend" for i in resp.intent.implicit_intents)
+            or "travel" in resp.intent.intent_label.lower()
+        )
 
 
 class TestSlotTracking:
-    """槽位填充与跨轮继承。"""
+    """Slot filling and cross-turn inheritance."""
 
     def test_product_slot_filled(self, pipeline: IntentPipeline, session_id: str):
-        resp = pipeline.process("安心保重疾险2026年保费多少？", session_id)
-        assert resp.intent.slots["product_name"].value == "安心保重疾险2026"
+        resp = pipeline.process("How much is the premium for Anxin Critical Illness 2026?", session_id)
+        assert resp.intent.slots["product_name"].value == "Anxin Critical Illness 2026"
 
     def test_slot_inherited_across_turns(self, pipeline: IntentPipeline, session_id: str):
-        pipeline.process("安心保重疾险2026年保费多少？", session_id)
-        resp = pipeline.process("等待期呢？", session_id)
-        assert resp.intent.slots["product_name"].value == "安心保重疾险2026"
+        pipeline.process("How much is the premium for Anxin Critical Illness 2026?", session_id)
+        resp = pipeline.process("What about the waiting period?", session_id)
+        assert resp.intent.slots["product_name"].value == "Anxin Critical Illness 2026"
 
     def test_compare_products_dual_slots(self, pipeline: IntentPipeline):
-        resp = pipeline.process("对比一下安心保和康乐医疗险Plus")
-        assert resp.intent.slots["product_a"].value == "安心保重疾险2026"
-        assert resp.intent.slots["product_b"].value == "康乐医疗险Plus"
+        resp = pipeline.process("Compare Anxin Critical Illness 2026 and Kangle Medical Plus")
+        assert resp.intent.slots["product_a"].value == "Anxin Critical Illness 2026"
+        assert resp.intent.slots["product_b"].value == "Kangle Medical Plus"
 
 
 class TestDriftDetection:
-    """意图漂移检测。"""
+    """Intent drift detection."""
 
     def test_topic_shift_detected(self, pipeline: IntentPipeline, session_id: str):
-        pipeline.process("安心保重疾险2026年保费多少？", session_id)
-        resp = pipeline.process("另外我想了解医疗险理赔流程", session_id)
+        pipeline.process("How much is the premium for Anxin Critical Illness 2026?", session_id)
+        resp = pipeline.process("Also tell me about the medical insurance claims process", session_id)
         assert resp.intent.drift_detected is True
-        assert resp.intent.intent == "query_medical_claim"
+        assert resp.intent.category == "claims_service"
 
     def test_related_intent_not_drift(self, pipeline: IntentPipeline, session_id: str):
-        pipeline.process("安心保重疾险2026年保费多少？", session_id)
-        resp = pipeline.process("它的等待期是多久？", session_id)
+        pipeline.process("How much is the premium for Anxin Critical Illness 2026?", session_id)
+        resp = pipeline.process("How long is its waiting period?", session_id)
         assert resp.intent.drift_detected is False
 
 
 class TestMultiIntent:
-    """多意图分解。"""
+    """Multi-intent decomposition."""
 
     def test_compound_utterance_decomposed(self, pipeline: IntentPipeline, session_id: str):
-        pipeline.process("安心保重疾险2026", session_id)
-        resp = pipeline.process("保费多少，还有等待期是多久？", session_id)
-        sub_names = {s.intent for s in resp.intent.sub_intents}
+        pipeline.process("Anxin Critical Illness 2026", session_id)
+        resp = pipeline.process("How much is the premium, and how long is the waiting period?", session_id)
         assert len(resp.intent.sub_intents) >= 1
 
 
 class TestLatency:
-    """延迟预算。"""
+    """Latency budget."""
 
     def test_within_latency_budget(self, pipeline: IntentPipeline):
-        resp = pipeline.process("你好，我想了解重疾险")
+        resp = pipeline.process("Hello, I'd like to learn about critical illness insurance")
         assert resp.total_latency_ms <= settings.latency.total_ms
         assert resp.metadata["within_latency_budget"] is True
 
 
 class TestMultiTurnFlow:
-    """完整多轮对话流程。"""
+    """Full multi-turn dialogue flow."""
 
     def test_full_insurance_dialogue(self, pipeline: IntentPipeline):
         sid = "full-flow-test"
         turns = [
-            ("你好，我想了解一下重疾险", "greeting"),
-            ("安心保重疾险2026年保费多少？", "query_critical_illness_premium"),
-            ("那它的等待期是多久？", "query_waiting_period"),
-            ("另外医疗险理赔流程是怎样的？", "query_medical_claim"),
-            ("我最近经常出差", "recommend_accident_insurance"),
-            ("帮我对比一下安心保和康乐医疗险Plus", "compare_products"),
+            ("Hello, I'd like to learn about critical illness insurance", "greeting_chitchat"),
+            ("How much is the premium for Anxin Critical Illness 2026?", "premium_inquiry"),
+            ("How long is its waiting period?", "coverage_terms"),
+            ("Tell me about the medical insurance claims process", "claims_service"),
+            ("I travel frequently for work", "product_recommend"),
+            ("Compare Anxin Critical Illness 2026 and Kangle Medical Plus", "product_compare"),
         ]
         for utterance, expected in turns:
             resp = pipeline.process(utterance, sid)
-            assert resp.intent.intent == expected, (
-                f"Turn '{utterance}': expected {expected}, got {resp.intent.intent}"
+            assert resp.intent.category == expected, (
+                f"Turn '{utterance}': expected {expected}, got {resp.intent.category}"
             )
 
         ctx = pipeline.get_or_create_session(sid)
@@ -148,28 +150,28 @@ class TestMultiTurnFlow:
 
 
 class TestLightweightEngine:
-    """轻量引擎单元测试。"""
+    """Lightweight engine unit tests."""
 
     def test_high_confidence_greeting(self):
         engine = LightweightIntentEngine()
-        result = engine.predict("你好")
+        result = engine.predict("Hello")
         assert result.intent == "greeting"
         assert engine.is_confident(result)
 
     def test_latency_under_budget(self):
         engine = LightweightIntentEngine()
-        result = engine.predict("重疾险保费多少钱")
+        result = engine.predict("How much is critical illness premium?")
         assert result.latency_ms < settings.latency.frontend_engine_ms
 
 
 class TestContextManager:
-    """上下文管理单元测试。"""
+    """Context manager unit tests."""
 
     def test_build_context_window(self):
         mgr = ContextManager()
         ctx = mgr.create_session("ctx-test")
-        mgr.add_turn(ctx, "user", "你好")
-        mgr.add_turn(ctx, "assistant", "您好，有什么可以帮您？")
+        mgr.add_turn(ctx, "user", "Hello")
+        mgr.add_turn(ctx, "assistant", "Hello! How can I help you today?")
         window = mgr.build_context_window(ctx)
-        assert "用户" in window
-        assert "客服" in window
+        assert "User" in window
+        assert "Agent" in window

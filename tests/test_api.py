@@ -1,4 +1,4 @@
-"""FastAPI 接口测试。"""
+"""FastAPI endpoint tests."""
 
 from __future__ import annotations
 
@@ -25,27 +25,27 @@ class TestAPI:
 
     def test_predict_sync(self):
         resp = client.post("/v1/intent/predict/sync", json={
-            "utterance": "安心保重疾险保费多少？",
+            "utterance": "How much is Anxin Critical Illness premium?",
         })
         assert resp.status_code == 200
         data = resp.json()
-        assert data["primary_intent"] == "query_critical_illness_premium"
+        assert data["category"] == "premium_inquiry"
         assert data["confidence"] >= 0.75
         assert data["total_latency_ms"] <= 600
         session_id = data["session_id"]
 
-        # 多轮：指代消解
+        # Multi-turn: reference resolution
         resp2 = client.post("/v1/intent/predict/sync", json={
-            "utterance": "它的等待期呢？",
+            "utterance": "How long is its waiting period?",
             "session_id": session_id,
         })
         assert resp2.status_code == 200
         data2 = resp2.json()
-        assert data2["primary_intent"] == "query_waiting_period"
-        assert "安心保" in data2["resolved_utterance"]
+        assert data2["category"] == "coverage_terms"
+        assert "Anxin" in data2["resolved_utterance"]
 
     def test_reset_session(self):
-        resp = client.post("/v1/intent/predict/sync", json={"utterance": "你好"})
+        resp = client.post("/v1/intent/predict/sync", json={"utterance": "Hello"})
         sid = resp.json()["session_id"]
         del_resp = client.delete(f"/v1/session/{sid}")
         assert del_resp.status_code == 200

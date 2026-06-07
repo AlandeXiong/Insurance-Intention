@@ -1,4 +1,4 @@
-"""槽位填充与追踪模块。"""
+"""Slot filling and tracking module."""
 
 from __future__ import annotations
 
@@ -10,14 +10,14 @@ from src.models.intent import SessionContext, Slot, SlotStatus
 
 
 class SlotTracker:
-    """基于规则 + 上下文的槽位抽取与跨轮追踪。"""
+    """Rule- and context-based slot extraction and cross-turn tracking."""
 
     SLOT_PATTERNS = {
-        "age": re.compile(r"(\d{1,3})\s*岁"),
-        "coverage_amount": re.compile(r"(\d+)\s*万"),
-        "payment_period": re.compile(r"(?<![0-9])(\d{1,2})\s*年(?:交|缴|期)?"),
-        "budget": re.compile(r"预算\s*(\d+)\s*元?"),
-        "compare_dimension": re.compile(r"对比.{0,4}(保费|保障|理赔|等待期)"),
+        "age": re.compile(r"(\d{1,3})\s*(?:years?\s*old|yrs?|yo)\b|(?:age\s*)?(\d{1,3})\b"),
+        "coverage_amount": re.compile(r"(\d+)\s*(?:wan|10k|million|M)\b", re.IGNORECASE),
+        "payment_period": re.compile(r"(?<![0-9])(\d{1,2})\s*(?:year|yr)s?\s*(?:payment|term|premium)?"),
+        "budget": re.compile(r"budget\s*\$?(\d+)", re.IGNORECASE),
+        "compare_dimension": re.compile(r"compar(?:e|ing).{0,10}(premium|coverage|claims|waiting\s*period)", re.IGNORECASE),
     }
 
     def extract_slots(
@@ -69,19 +69,22 @@ class SlotTracker:
         if pattern:
             m = pattern.search(utterance)
             if m:
-                return m.group(1) if m.lastindex else m.group(0)
+                return next((g for g in m.groups() if g is not None), m.group(0))
 
-        if slot_name == "travel_frequency" and any(k in utterance for k in ("经常出差", "经常旅行")):
-            return "高频"
+        if slot_name == "travel_frequency" and any(
+            k in utterance.lower() for k in ("frequent business travel", "frequent travel")
+        ):
+            return "high frequency"
 
         return None
 
     def _match_product(self, utterance: str, ctx: Optional[SessionContext]) -> Optional[str]:
+        utterance_lower = utterance.lower()
         for product, aliases in PRODUCT_ENTITIES.items():
-            if product in utterance:
+            if product.lower() in utterance_lower:
                 return product
             for alias in aliases:
-                if len(alias) > 1 and alias in utterance:
+                if len(alias) > 1 and alias.lower() in utterance_lower:
                     return product
         if ctx and ctx.active_product:
             return ctx.active_product
@@ -97,7 +100,7 @@ class SlotTracker:
         ]
 
     def fill_compare_products(self, utterance: str) -> Dict[str, Slot]:
-        """对比意图专用：抽取两个产品。"""
+        """Compare intent only: extract two products."""
         found: List[str] = []
         for product, aliases in PRODUCT_ENTITIES.items():
             if product in utterance or any(a in utterance for a in aliases if len(a) > 1):

@@ -1,11 +1,11 @@
 """
-多轮上下文管理 — 工业级 DST（Dialogue State Tracking）
+Multi-turn context management — production-grade DST (Dialogue State Tracking)
 
-能力对齐 SOTA：
-- 结构化对话状态快照（TopicFrame + slot_memory + entity_salience）
-- 多层指代消解（代词 / 指示词 / 省略句）
-- 槽位跨轮继承与冲突消解
-- 分层上下文窗口（状态摘要 + 近期对话 + 澄清状态）
+SOTA-aligned capabilities:
+- Structured dialogue state snapshot (TopicFrame + slot_memory + entity_salience)
+- Multi-layer reference resolution (pronouns / demonstratives / ellipsis)
+- Cross-turn slot inheritance and conflict resolution
+- Layered context window (state summary + recent dialogue + clarification state)
 """
 
 from __future__ import annotations
@@ -18,12 +18,20 @@ from src.context.semantic import semantic_similarity
 from src.domain.insurance_domain import PRODUCT_ENTITIES
 from src.models.intent import DialogueTurn, SessionContext, Slot, SlotStatus, TopicFrame
 
-# 指代词表（扩展版）
-PRONOUNS = {"它", "这个", "那个", "这款", "那款", "该产品", "此产品", "这款产品", "那款产品"}
-INDIRECT_REFS = {"刚才说的", "上面的", "之前提到的", "前述", "这款", "那款"}
+# Pronoun / demonstrative lexicon (extended)
+PRONOUNS = {
+    "its", "it", "this", "that", "this one", "that one",
+    "this product", "that product", "this plan", "that plan",
+    "the product", "this policy", "that policy",
+}
+INDIRECT_REFS = {
+    "as mentioned above", "mentioned above", "previously mentioned",
+    "mentioned earlier", "said earlier", "the one above",
+    "this one", "that one",
+}
 ELLIPSIS_PATTERNS = [
-    re.compile(r"^(等待期|保费|理赔|保障|续保|退保)(呢|吗|？|\?)?$"),
-    re.compile(r"^(多少钱|怎么样|怎么买)(呢|吗|？|\?)?$"),
+    re.compile(r"^(waiting period|premium|claims|coverage|renewal|surrender|cancellation)(\?)?$", re.IGNORECASE),
+    re.compile(r"^(how much|what about it|how to buy|how do i buy)(\?)?$", re.IGNORECASE),
 ]
 
 PHASE_BY_CATEGORY = {
@@ -41,7 +49,7 @@ PHASE_BY_CATEGORY = {
 
 
 class ContextManager:
-    """工业级多轮对话上下文管理器。"""
+    """Production-grade multi-turn dialogue context manager."""
 
     def __init__(self, max_history_turns: int = 10) -> None:
         self.max_history_turns = max_history_turns
@@ -76,18 +84,18 @@ class ContextManager:
         return turn
 
     def build_context_window(self, ctx: SessionContext, n: int = 6) -> str:
-        """分层上下文窗口 — 供 LLM Chain-of-Intent 使用。"""
+        """Layered context window — for LLM Chain-of-Intent."""
         sections: List[str] = []
 
         snapshot = self.build_state_snapshot(ctx)
         if snapshot:
-            sections.append("=== 对话状态快照 (DST) ===")
+            sections.append("=== Dialogue State Snapshot (DST) ===")
             sections.append(snapshot)
 
-        sections.append("=== 近期对话 ===")
+        sections.append("=== Recent Dialogue ===")
         recent = ctx.turns[-n:]
         for t in recent:
-            prefix = "用户" if t.role == "user" else "客服"
+            prefix = "User" if t.role == "user" else "Agent"
             display = t.resolved_content or t.content
             if t.intent_label and t.role == "user":
                 cat = f"[{t.category}]" if t.category else ""
@@ -96,49 +104,56 @@ class ContextManager:
                 sections.append(f"{prefix}: {display}")
 
         if ctx.pending_clarification.active:
-            sections.append("=== 澄清状态 ===")
-            sections.append("等待用户回答澄清追问，当前轮可能是对追问的回复")
+            sections.append("=== Clarification State ===")
+            sections.append(
+                "Awaiting user's reply to clarification follow-ups; "
+                "this turn may be a response to those questions"
+            )
 
         return "\n".join(sections)
 
     def build_state_snapshot(self, ctx: SessionContext) -> str:
-        """结构化 DST 状态摘要。"""
+        """Structured DST state summary."""
         lines = []
         if ctx.dialogue_phase != "init":
-            lines.append(f"对话阶段: {ctx.dialogue_phase}")
+            lines.append(f"Dialogue phase: {ctx.dialogue_phase}")
         if ctx.active_intent_label:
-            lines.append(f"活跃意图: {ctx.active_intent_label} ({ctx.active_category})")
+            lines.append(f"Active intent: {ctx.active_intent_label} ({ctx.active_category})")
         if ctx.active_product:
-            lines.append(f"焦点产品: {ctx.active_product}")
+            lines.append(f"Focus product: {ctx.active_product}")
         if ctx.slot_memory:
             filled = {k: s.value for k, s in ctx.slot_memory.items() if s.value}
             if filled:
-                lines.append(f"已确认槽位: {filled}")
+                lines.append(f"Confirmed slots: {filled}")
         if ctx.user_profile_hints:
-            lines.append(f"用户画像: {', '.join(ctx.user_profile_hints)}")
+            lines.append(f"User profile: {', '.join(ctx.user_profile_hints)}")
         if ctx.topic_frames:
             active = [f.intent_label for f in ctx.topic_frames if f.is_active][-2:]
             if active:
-                lines.append(f"活跃主题帧: {' → '.join(active)}")
+                lines.append(f"Active topic frames: {' → '.join(active)}")
         if ctx.category_history:
-            lines.append(f"分类轨迹: {' → '.join(ctx.category_history[-4:])}")
+            lines.append(f"Category trajectory: {' → '.join(ctx.category_history[-4:])}")
         return "\n".join(lines)
 
     def resolve_references(self, ctx: SessionContext, utterance: str) -> Tuple[str, dict]:
-        """多层指代消解：代词 + 指示词 + 省略句补全。"""
+        """Multi-layer reference resolution: pronouns + demonstratives + ellipsis completion."""
         resolved: dict = {}
         expanded = utterance
 
         target_product = self._resolve_focus_product(ctx)
 
-        for pronoun in PRONOUNS:
-            if pronoun in expanded and target_product:
-                expanded = expanded.replace(pronoun, target_product)
-                resolved[pronoun] = target_product
+        for pronoun in sorted(PRONOUNS, key=len, reverse=True):
+            if not target_product:
+                break
+            pattern = re.compile(rf"\b{re.escape(pronoun)}\b", re.IGNORECASE)
+            if pattern.search(expanded):
+                expanded = pattern.sub(target_product, expanded)
+                resolved[pronoun.lower()] = target_product
 
-        for ref in INDIRECT_REFS:
-            if ref in expanded and target_product:
-                expanded = expanded.replace(ref, target_product)
+        for ref in sorted(INDIRECT_REFS, key=len, reverse=True):
+            if ref in expanded.lower() and target_product:
+                pattern = re.compile(re.escape(ref), re.IGNORECASE)
+                expanded = pattern.sub(target_product, expanded)
                 resolved[ref] = target_product
 
         expanded, ellipsis_resolved = self._resolve_ellipsis(ctx, expanded)
@@ -165,7 +180,7 @@ class ContextManager:
         return None
 
     def _resolve_ellipsis(self, ctx: SessionContext, utterance: str) -> Tuple[str, dict]:
-        """省略句补全：如「等待期呢？」→「{产品}等待期呢？」。"""
+        """Ellipsis completion, e.g. 'waiting period?' -> '{product} waiting period?'."""
         resolved = {}
         text = utterance.strip()
         if not ctx.active_intent_label or not ctx.active_product:
@@ -175,7 +190,7 @@ class ContextManager:
             if pattern.match(text):
                 product = ctx.active_product
                 if product and product not in text:
-                    expanded = f"{product}{text}"
+                    expanded = f"{product} {text}"
                     resolved["ellipsis"] = product
                     return expanded, resolved
         return text, resolved
@@ -242,7 +257,7 @@ class ContextManager:
         ctx.entity_salience[entity] = min(ctx.entity_salience.get(entity, 0) + delta, 3.0)
 
     def merge_slots(self, ctx: SessionContext, new_slots: dict, turn_id: int) -> dict:
-        """跨轮槽位合并 + 冲突消解（新值优先，高置信继承）。"""
+        """Cross-turn slot merge + conflict resolution (new values win; high-confidence inheritance)."""
         merged: dict = {}
         for name, slot in ctx.slot_memory.items():
             merged[name] = slot.value
@@ -270,22 +285,23 @@ class ContextManager:
     def extract_profile_hints(self, utterance: str) -> List[str]:
         hints = []
         patterns = [
-            (r"经常出差", "经常出差"),
-            (r"经常旅行|经常旅游", "经常旅行"),
-            (r"高危职业|危险工作", "高危职业"),
-            (r"(\d+)\s*岁", None),
-            (r"有\d+岁小孩|小孩\d+岁", "有子女"),
+            (r"travel frequently|frequent business travel|travel often", "travels frequently"),
+            (r"travel often|frequent travel|travel a lot", "travels frequently"),
+            (r"high[- ]risk (job|occupation)|dangerous work", "high-risk occupation"),
+            (r"(\d+)\s*(years old|yo|y/o)?", None),
+            (r"(\d+)[- ]year[- ]old (child|kid)|child (is )?\d+", "has children"),
         ]
         for pattern, label in patterns:
-            m = re.search(pattern, utterance)
+            m = re.search(pattern, utterance, re.IGNORECASE)
             if m:
                 hints.append(label if label else m.group(0))
         return hints
 
     def should_inherit_context(self, ctx: SessionContext, utterance: str) -> bool:
-        """判断是否强依赖上文（用于漂移检测辅助）。"""
+        """Whether utterance strongly depends on prior context (drift detection assist)."""
         if len(utterance) < 12:
             return True
-        if any(p in utterance for p in PRONOUNS | INDIRECT_REFS):
+        utterance_lower = utterance.lower()
+        if any(p in utterance_lower for p in PRONOUNS | INDIRECT_REFS):
             return True
         return any(p.match(utterance.strip()) for p in ELLIPSIS_PATTERNS)

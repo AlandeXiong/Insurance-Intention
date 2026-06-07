@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""阿里云千问 API 连通性测试。"""
+"""Alibaba Cloud Qwen API connectivity test."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""FastAPI 服务入口 — 动态意图识别。"""
+"""FastAPI service entry point — dynamic intent recognition."""
 
 from __future__ import annotations
 

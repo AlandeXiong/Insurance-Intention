@@ -1,4 +1,4 @@
-"""实体抽取器 — 轻量辅助，不做固定意图分类。"""
+"""Entity extractor — lightweight assist; does not perform fixed intent classification."""
 
 from __future__ import annotations
 
@@ -8,41 +8,41 @@ from typing import Dict, Optional, Tuple
 from src.domain.insurance_domain import CATEGORY_BY_CODE, PRODUCT_ENTITIES
 from src.models.intent import SessionContext, Slot, SlotStatus
 
-# 关键词 → 参考分类 hint（降级路径用，非强制分类）
+# Keyword → reference category hint (fallback path only, not enforced classification)
 CATEGORY_HINTS: list[tuple[list[str], str, str]] = [
-    (["等待期", "观察期", "免责", "保障期限"], "coverage_terms", "查询保障条款"),
-    (["保费", "多少钱", "价格", "费率", "年缴"], "premium_inquiry", "咨询保费"),
-    (["理赔", "报销", "赔付"], "claims_service", "咨询理赔相关事宜"),
-    (["对比", "比较", "哪个好", "区别"], "product_compare", "对比保险产品"),
-    (["购买", "投保", "买一份", "怎么买"], "purchase", "表达投保意向"),
-    (["续保", "退保", "保单", "变更"], "policy_service", "办理保单服务"),
-    (["推荐", "买什么", "适合"], "product_recommend", "寻求产品推荐"),
-    (["出差", "旅行", "意外"], "product_recommend", "基于场景的产品推荐"),
-    (["你好", "您好", "在吗"], "greeting_chitchat", "寒暄问候"),
-    (["重疾", "医疗", "保障范围", "保什么"], "product_inquiry", "咨询产品保障"),
+    (["waiting period", "observation period", "exclusion", "coverage term"], "coverage_terms", "Inquire about coverage terms"),
+    (["premium", "how much", "price", "rate", "annual payment"], "premium_inquiry", "Inquire about premium"),
+    (["claim", "reimburse", "payout"], "claims_service", "Inquire about claims"),
+    (["compare", "comparison", "which is better", "difference"], "product_compare", "Compare insurance products"),
+    (["buy", "purchase", "enroll", "how to buy"], "purchase", "Express purchase intent"),
+    (["renew", "surrender", "policy", "change"], "policy_service", "Policy service request"),
+    (["recommend", "what to buy", "suitable for"], "product_recommend", "Seek product recommendation"),
+    (["business travel", "travel", "accident"], "product_recommend", "Scenario-based product recommendation"),
+    (["hello", "hi", "hey", "are you there"], "greeting_chitchat", "Greeting"),
+    (["critical illness", "medical", "coverage scope", "what does it cover"], "product_inquiry", "Inquire about product coverage"),
 ]
 
 
 class EntityExtractor:
-    """抽取实体槽位 + 降级时的意图 hint，不替代 LLM 动态识别。"""
+    """Extract entity slots + intent hints on fallback; does not replace LLM dynamic recognition."""
 
     SLOT_PATTERNS = {
-        "age": re.compile(r"(\d{1,3})\s*岁"),
-        "coverage_amount": re.compile(r"(\d+)\s*万"),
-        "payment_period": re.compile(r"(?<![0-9])(\d{1,2})\s*年(?:交|缴|期)?"),
-        "budget": re.compile(r"预算\s*(\d+)\s*元?"),
+        "age": re.compile(r"(\d{1,3})\s*(?:years?\s*old|yrs?|yo)\b|age\s*(\d{1,3})\b", re.IGNORECASE),
+        "coverage_amount": re.compile(r"(\d+)\s*(?:wan|10k|million|M)\b", re.IGNORECASE),
+        "payment_period": re.compile(r"(?<![0-9])(\d{1,2})\s*(?:year|yr)s?\s*(?:payment|term|premium)?"),
+        "budget": re.compile(r"budget\s*\$?(\d+)", re.IGNORECASE),
     }
 
     def infer_intent_hint(
         self, utterance: str, ctx: Optional[SessionContext] = None
     ) -> Tuple[str, str, float]:
-        """降级路径：返回 (intent_label, category_code, confidence)。"""
-        best_label = "未能识别用户意图"
+        """Fallback path: returns (intent_label, category_code, confidence)."""
+        best_label = "Could not recognize user intent"
         best_cat = "other"
         best_conf = 0.3
 
         for keywords, cat, label in CATEGORY_HINTS:
-            hits = sum(1 for kw in keywords if kw in utterance)
+            hits = sum(1 for kw in keywords if kw.lower() in utterance.lower())
             if hits > 0:
                 conf = min(0.65 + 0.05 * hits, 0.85)
                 if conf > best_conf:
@@ -69,15 +69,16 @@ class EntityExtractor:
         for name, pattern in self.SLOT_PATTERNS.items():
             m = pattern.search(utterance)
             if m:
+                value = next((g for g in m.groups() if g is not None), m.group(0))
                 slots[name] = Slot(
                     name=name,
-                    value=m.group(1) if m.lastindex else m.group(0),
+                    value=value,
                     status=SlotStatus.FILLED,
                     confidence=0.85,
                 )
 
-        if any(k in utterance for k in ("经常出差", "经常旅行")):
-            slots["scenario"] = Slot(name="scenario", value="高频出行", status=SlotStatus.FILLED, confidence=0.8)
+        if any(k in utterance.lower() for k in ("frequent business travel", "frequent travel")):
+            slots["scenario"] = Slot(name="scenario", value="high-frequency travel", status=SlotStatus.FILLED, confidence=0.8)
 
         if ctx:
             for name, mem in ctx.slot_memory.items():
@@ -106,11 +107,12 @@ class EntityExtractor:
         return slots
 
     def _match_product(self, utterance: str, ctx: Optional[SessionContext]) -> Optional[str]:
+        utterance_lower = utterance.lower()
         for product, aliases in PRODUCT_ENTITIES.items():
-            if product in utterance:
+            if product.lower() in utterance_lower:
                 return product
             for alias in aliases:
-                if len(alias) > 1 and alias in utterance:
+                if len(alias) > 1 and alias.lower() in utterance_lower:
                     return product
         if ctx and ctx.active_product:
             return ctx.active_product

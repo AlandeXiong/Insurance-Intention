@@ -1,4 +1,4 @@
-"""LLM 提供商注册表 — DeepSeek / 阿里云千问等 OpenAI 兼容 API。"""
+"""LLM provider registry — DeepSeek, Alibaba Cloud Qwen, and other OpenAI-compatible APIs."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ PROVIDERS: Dict[str, LLMProviderSpec] = {
     ),
     "qwen": LLMProviderSpec(
         name="qwen",
-        display_name="阿里云千问",
+        display_name="Alibaba Cloud Qwen",
         api_base="https://dashscope.aliyuncs.com/compatible-mode/v1",
         default_model="qwen-plus",
         api_key_env="DASHSCOPE_API_KEY",
